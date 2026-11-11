@@ -1,0 +1,149 @@
+{
+  "id": "a240cb4f-4bb3-4ea6-96d2-00174a412200",
+  "name": "LendLoop - Daily overdue reminders",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "days", "triggerAtHour": 9 }]
+        }
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412201",
+      "name": "Every day at 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.LENDLOOP_HMAC_SECRET;\nconst baseUrl = $env.LENDLOOP_CONVEX_HTTP_URL;\nif (!secret || !baseUrl) throw new Error('Missing LendLoop n8n environment configuration');\nconst body = '{}';\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');\nreturn [{ json: { url: `${baseUrl.replace(/\\/$/, '')}/n8n/overdue`, body, timestamp, signature } }];"
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412202",
+      "name": "Sign overdue fetch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-lendloop-timestamp", "value": "={{ $json.timestamp }}" },
+            { "name": "x-lendloop-signature", "value": "={{ 'v1=' + $json.signature }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412203",
+      "name": "Fetch overdue loans from Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 320],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const response = $input.first().json;\nconst body = response.body ?? response;\nif (!Array.isArray(body.loans)) throw new Error('Convex overdue endpoint returned an invalid response');\nreturn body.loans.map((loan) => ({ json: loan }));"
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412204",
+      "name": "Expand overdue loans",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const loan = $input.item.json;\nif (!loan.recipientEmail) {\n  return { json: { ...loan, reminderStatus: 'failed', detail: 'Borrower has no email address on file' } };\n}\nconsole.log('[LendLoop mock overdue reminder]', JSON.stringify({\n  idempotencyKey: loan.idempotencyKey,\n  to: loan.recipientEmail,\n  recipientName: loan.recipientName,\n  toolName: loan.toolName,\n  dueAt: loan.dueAt\n}));\nreturn { json: { ...loan, reminderStatus: 'sent' } };"
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412205",
+      "name": "Log reminder or missing-email failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1240, 320]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.LENDLOOP_HMAC_SECRET;\nconst baseUrl = $env.LENDLOOP_CONVEX_HTTP_URL;\nif (!secret || !baseUrl) throw new Error('Missing LendLoop n8n environment configuration');\nconst loan = $input.item.json;\nconst payload = {\n  requestId: loan.requestId,\n  idempotencyKey: loan.idempotencyKey,\n  status: loan.reminderStatus,\n  ...(loan.detail ? { detail: loan.detail } : {})\n};\nconst body = JSON.stringify(payload);\nconst timestamp = Math.floor(Date.now() / 1000).toString();\nconst signature = crypto.createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');\nreturn { json: { url: `${baseUrl.replace(/\\/$/, '')}/n8n/reminders`, body, timestamp, signature } };"
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412206",
+      "name": "Sign reminder writeback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "content-type", "value": "application/json" },
+            { "name": "x-lendloop-timestamp", "value": "={{ $json.timestamp }}" },
+            { "name": "x-lendloop-signature", "value": "={{ 'v1=' + $json.signature }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.body }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "a240cb4f-4bb3-4ea6-96d2-00174a412207",
+      "name": "Write reminder status to Convex",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 320],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 3000
+    }
+  ],
+  "connections": {
+    "Every day at 09:00": {
+      "main": [[{ "node": "Sign overdue fetch", "type": "main", "index": 0 }]]
+    },
+    "Sign overdue fetch": {
+      "main": [[{ "node": "Fetch overdue loans from Convex", "type": "main", "index": 0 }]]
+    },
+    "Fetch overdue loans from Convex": {
+      "main": [[{ "node": "Expand overdue loans", "type": "main", "index": 0 }]]
+    },
+    "Expand overdue loans": {
+      "main": [[{ "node": "Log reminder or missing-email failure", "type": "main", "index": 0 }]]
+    },
+    "Log reminder or missing-email failure": {
+      "main": [[{ "node": "Sign reminder writeback", "type": "main", "index": 0 }]]
+    },
+    "Sign reminder writeback": {
+      "main": [[{ "node": "Write reminder status to Convex", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "c350cb4f-4bb3-4ea6-96d2-00174a412300"
+  },
+  "versionId": "a240cb4f-4bb3-4ea6-96d2-00174a412208",
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "tags": []
+}

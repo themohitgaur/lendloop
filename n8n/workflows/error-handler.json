@@ -1,0 +1,39 @@
+{
+  "id": "c350cb4f-4bb3-4ea6-96d2-00174a412300",
+  "name": "LendLoop - Automation errors",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c350cb4f-4bb3-4ea6-96d2-00174a412301",
+      "name": "On workflow error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const failure = $input.first().json;\nconsole.error('[LendLoop workflow failure]', JSON.stringify({\n  workflow: failure.workflow?.name,\n  executionId: failure.execution?.id,\n  lastNode: failure.execution?.lastNodeExecuted,\n  message: String(failure.execution?.error?.message ?? 'Unknown workflow error').slice(0, 200)\n}));\nreturn [{ json: { recorded: true, executionId: failure.execution?.id ?? null } }];"
+      },
+      "id": "c350cb4f-4bb3-4ea6-96d2-00174a412302",
+      "name": "Log minimized failure details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "On workflow error": {
+      "main": [[{ "node": "Log minimized failure details", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c350cb4f-4bb3-4ea6-96d2-00174a412303",
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "tags": []
+}

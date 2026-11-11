@@ -1,0 +1,25 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5678
+      WEBHOOK_URL: ${N8N_PUBLIC_WEBHOOK_URL:?Set N8N_PUBLIC_WEBHOOK_URL to a public HTTPS URL}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-UTC}
+      TZ: ${GENERIC_TIMEZONE:-UTC}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set a private encryption key}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      LENDLOOP_HMAC_SECRET: ${LENDLOOP_HMAC_SECRET:?Set the shared HMAC secret}
+      LENDLOOP_CONVEX_HTTP_URL: ${LENDLOOP_CONVEX_HTTP_URL:?Set the Convex HTTP actions base URL}
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

@@ -1,0 +1,61 @@
+{
+  "id": "b130cb4f-4bb3-4ea6-96d2-00174a412100",
+  "name": "LendLoop - Request notifications",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lendloop-request-notifications",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "b130cb4f-4bb3-4ea6-96d2-00174a412101",
+      "name": "Receive request event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [240, 300],
+      "webhookId": "lendloop-request-notifications"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const crypto = require('crypto');\nconst secret = $env.LENDLOOP_HMAC_SECRET;\nif (!secret) throw new Error('Missing LENDLOOP_HMAC_SECRET');\nconst input = $input.first().json;\nlet payload = input.body ?? input;\nif (typeof payload === 'string') payload = JSON.parse(payload);\nconst headers = input.headers ?? {};\nconst timestamp = String(headers['x-lendloop-timestamp'] ?? '');\nconst signature = String(headers['x-lendloop-signature'] ?? '').replace(/^v1=/, '');\nif (!/^\\d+$/.test(timestamp) || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {\n  throw new Error('Rejected stale or invalid timestamp');\n}\nconst expected = crypto.createHmac('sha256', secret).update(`${timestamp}.${JSON.stringify(payload)}`).digest('hex');\nconst suppliedBytes = Buffer.from(signature, 'hex');\nconst expectedBytes = Buffer.from(expected, 'hex');\nif (suppliedBytes.length !== expectedBytes.length || !crypto.timingSafeEqual(suppliedBytes, expectedBytes)) {\n  throw new Error('Rejected invalid LendLoop HMAC signature');\n}\nif (!payload.eventId || !payload.requestId || !payload.recipientEmail) {\n  throw new Error('Request event is missing required notification fields');\n}\nreturn [{ json: payload }];"
+      },
+      "id": "b130cb4f-4bb3-4ea6-96d2-00174a412102",
+      "name": "Verify HMAC and minimize payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const event = $input.first().json;\nconsole.log('[LendLoop mock notification]', JSON.stringify({\n  eventId: event.eventId,\n  eventType: event.eventType,\n  to: event.recipientEmail,\n  recipientName: event.recipientName,\n  toolName: event.toolName,\n  status: event.status,\n  startAt: event.startAt,\n  endAt: event.endAt\n}));\nreturn [{ json: { accepted: true, eventId: event.eventId } }];"
+      },
+      "id": "b130cb4f-4bb3-4ea6-96d2-00174a412103",
+      "name": "Log mock notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 300]
+    }
+  ],
+  "connections": {
+    "Receive request event": {
+      "main": [[{ "node": "Verify HMAC and minimize payload", "type": "main", "index": 0 }]]
+    },
+    "Verify HMAC and minimize payload": {
+      "main": [[{ "node": "Log mock notification", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "c350cb4f-4bb3-4ea6-96d2-00174a412300"
+  },
+  "versionId": "b130cb4f-4bb3-4ea6-96d2-00174a412104",
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "tags": []
+}
